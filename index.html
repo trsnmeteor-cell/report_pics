@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>画像報告アプリ</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#e35f3f">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+  :root {
+    --ink: #22303a; --sub: #6b7a85; --line: #dde4e8; --paper: #ffffff;
+    --bg: #eef1f3; --accent: #e35f3f; --ok: #0f6b5c; --err: #b3362a;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic", Meiryo, system-ui, sans-serif;
+    background: var(--bg); color: var(--ink); min-height: 100vh;
+    display: flex; justify-content: center; padding: 24px 16px 48px;
+  }
+  .app { width: 100%; max-width: 480px; }
+  header.app-header { text-align: center; margin-bottom: 20px; }
+  header.app-header h1 { font-size: 20px; letter-spacing: 0.06em; }
+  header.app-header p { font-size: 12px; color: var(--sub); margin-top: 4px; }
+  .card {
+    background: var(--paper); border-radius: 14px; border: 1px solid var(--line);
+    padding: 22px 20px; box-shadow: 0 2px 10px rgba(34,48,58,0.06);
+  }
+  label.field-label { display: block; font-size: 13px; font-weight: 700; margin: 18px 0 6px; }
+  label.field-label:first-child { margin-top: 0; }
+  label.field-label .req { color: var(--accent); }
+  select, textarea {
+    width: 100%; font-size: 16px; padding: 12px 14px; border: 1.5px solid var(--line);
+    border-radius: 10px; background: #fbfcfc; color: var(--ink); font-family: inherit;
+  }
+  select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .dest-note { margin-top: 6px; font-size: 12px; color: var(--sub); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .dest-chip {
+    display: inline-block; padding: 2px 10px; border-radius: 999px; color: #fff; font-weight: 700; font-size: 11px;
+  }
+  .photo-drop {
+    border: 2px dashed #b9c4cb; border-radius: 12px; padding: 18px; text-align: center;
+    cursor: pointer; transition: border-color 0.15s;
+  }
+  .photo-drop:hover { border-color: var(--accent); }
+  .photo-drop .ph-icon { font-size: 30px; }
+  .photo-drop .ph-text { font-size: 14px; font-weight: 700; margin-top: 4px; }
+  .photo-drop .ph-sub { font-size: 11.5px; color: var(--sub); margin-top: 2px; }
+  #photoInput { display: none; }
+  .preview-wrap { position: relative; display: none; }
+  .preview-wrap img {
+    width: 100%; max-height: 340px; object-fit: contain; border-radius: 10px; background: #f2f4f5;
+  }
+  .preview-clear {
+    position: absolute; top: 8px; right: 8px; background: rgba(34,48,58,0.85); color: #fff;
+    border: none; border-radius: 999px; padding: 6px 12px; font-size: 12px; cursor: pointer;
+  }
+  .submit-btn {
+    width: 100%; margin-top: 22px; background: var(--accent); color: #fff; border: none;
+    border-radius: 12px; padding: 16px; font-size: 17px; font-weight: 700; letter-spacing: 0.08em; cursor: pointer;
+  }
+  .submit-btn:hover { filter: brightness(0.95); }
+  .submit-btn:disabled { opacity: 0.55; cursor: wait; }
+  .status { margin-top: 14px; font-size: 14px; text-align: center; min-height: 20px; }
+  .status.ok { color: var(--ok); font-weight: 700; }
+  .status.err { color: var(--err); font-weight: 700; }
+  .done-view { display: none; text-align: center; padding: 26px 10px; }
+  .done-view .done-icon { font-size: 46px; }
+  .done-view h2 { font-size: 18px; margin: 10px 0 4px; color: var(--ok); }
+  .done-view p { font-size: 13px; color: var(--sub); }
+  .done-view .again-btn {
+    margin-top: 18px; background: var(--paper); color: var(--ink); border: 1.5px solid var(--line);
+    border-radius: 10px; padding: 12px 26px; font-size: 14px; font-weight: 700; cursor: pointer;
+  }
+  footer.app-footer { text-align: center; font-size: 11px; color: var(--sub); margin-top: 18px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <h1>📷 画像報告アプリ</h1>
+      <p>報告内容を選んで、写真を添えて送信します</p>
+    </header>
+
+    <div class="card">
+      <form id="reportForm">
+        <label class="field-label" for="typeSelect">報告内容 <span class="req">※必須</span></label>
+        <select id="typeSelect" required>
+          <option value="" disabled selected>選択してください</option>
+          <option value="kanban">看板報告</option>
+          <option value="softcream">ソフトクリーム報告</option>
+          <option value="grist">グリスト報告</option>
+          <option value="beer">ビール報告</option>
+        </select>
+        <div class="dest-note">送信先: <span class="dest-chip" id="destChip" style="background:#9aa7af">未選択</span><span id="destText">報告内容に合わせて自動で切り替わります</span></div>
+
+        <label class="field-label">画像 <span class="req">※必須</span></label>
+        <div class="photo-drop" id="photoDrop" role="button" tabindex="0" aria-label="画像を選択または撮影">
+          <div class="ph-icon">🖼️</div>
+          <div class="ph-text">タップして画像を選択</div>
+          <div class="ph-sub">カメラ撮影も可（スマホの場合）</div>
+        </div>
+        <input type="file" id="photoInput" accept="image/*" capture="environment">
+        <div class="preview-wrap" id="previewWrap">
+          <img id="previewImg" alt="選択した画像のプレビュー">
+          <button type="button" class="preview-clear" id="previewClear">削除</button>
+        </div>
+
+        <label class="field-label" for="commentInput">一言コメント（任意）</label>
+        <textarea id="commentInput" rows="2" placeholder="例）右側の看板が落ちています"></textarea>
+
+        <button type="submit" class="submit-btn" id="submitBtn">📤 報告する</button>
+        <div class="status" id="status" aria-live="polite"></div>
+      </form>
+
+      <div class="done-view" id="doneView">
+        <div class="done-icon">✅</div>
+        <h2>報告を送信しました</h2>
+        <p id="doneDetail"></p>
+        <button type="button" class="again-btn" id="againBtn">新しい報告を書く</button>
+      </div>
+    </div>
+
+    <footer class="app-footer">画像は外部画像ホストにアップロードされ、そのURLを Google Chat に送信します</footer>
+  </div>
+
+<script>
+/* ============================================================
+   ▼▼ 設定：ここを編集すればWebhook URLを変更できます ▼▼
+   （Google Chat のスペース設定 → アプリと統合 → Webhook で取得）
+   ============================================================ */
+var WEBHOOKS = {
+  kanban:    'https://chat.googleapis.com/v1/spaces/AAAARidKbVQ/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=qhSPYGDqywsPutx8dj28eYSzzqE_bwxQczgcHC3OMnw',
+  softcream: 'https://chat.googleapis.com/v1/spaces/AAQAt5vZijM/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=DiEm00nUVrdmkD9VvKbEaGq-P76WU99i_KERCxLY30U',
+  grist:     'https://chat.googleapis.com/v1/spaces/AAQAr8EVDu8/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=VSo8grpz3enfUcJwQsQ3WYiyJaT2-65800CioZ5WXwU',
+  beer:      'https://chat.googleapis.com/v1/spaces/AAQAo9Z2dnU/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=Hqs0Rp9gXexQYJzV8t2q7qREARh-5FNK2FIy9e0un_Y'
+};
+/* 任意：imgbb（https://api.imgbb.com）の無料APIキーを入れると
+   画像が無期限保持になります。空欄の場合は tmpfiles.org（60分保持）を使います */
+var IMGBB_KEY = '';
+
+(function () {
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function () {});
+    });
+  }
+
+  var TYPES = {
+    kanban:    { label: '看板報告',          emoji: '📢', color: '#0f6b5c' },
+    softcream: { label: 'ソフトクリーム報告', emoji: '🍦', color: '#d6658a' },
+    grist:     { label: 'グリスト報告',       emoji: '🛢️', color: '#8a6d1f' },
+    beer:      { label: 'ビール報告',         emoji: '🍺', color: '#b07810' }
+  };
+  var form = document.getElementById('reportForm');
+  var typeSelect = document.getElementById('typeSelect');
+  var destChip = document.getElementById('destChip');
+  var destText = document.getElementById('destText');
+  var photoDrop = document.getElementById('photoDrop');
+  var photoInput = document.getElementById('photoInput');
+  var previewWrap = document.getElementById('previewWrap');
+  var previewImg = document.getElementById('previewImg');
+  var previewClear = document.getElementById('previewClear');
+  var commentInput = document.getElementById('commentInput');
+  var submitBtn = document.getElementById('submitBtn');
+  var status = document.getElementById('status');
+  var doneView = document.getElementById('doneView');
+  var doneDetail = document.getElementById('doneDetail');
+  var againBtn = document.getElementById('againBtn');
+
+  typeSelect.addEventListener('change', function () {
+    var t = TYPES[typeSelect.value];
+    if (t) {
+      destChip.textContent = t.emoji + ' ' + t.label + ' チャンネル';
+      destChip.style.background = t.color;
+      destText.textContent = 'へ送信します';
+    }
+  });
+
+  photoDrop.addEventListener('click', function () { photoInput.click(); });
+  photoDrop.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); photoInput.click(); }
+  });
+  photoInput.addEventListener('change', function () {
+    var f = photoInput.files && photoInput.files[0];
+    if (f) showPreview(f);
+  });
+  previewClear.addEventListener('click', function () {
+    photoInput.value = '';
+    previewWrap.style.display = 'none';
+    photoDrop.style.display = 'block';
+  });
+
+  function showPreview(file) {
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      previewImg.src = e.target.result;
+      previewWrap.style.display = 'block';
+      photoDrop.style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+  }
+
+  /* 画像を最大1600px・JPEGに縮小してアップロード負荷を軽減 */
+  function resizeImage(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        var img = new Image();
+        img.onload = function () {
+          var max = 1600;
+          var w = img.width, h = img.height;
+          if (w > max || h > max) {
+            var r = Math.min(max / w, max / h);
+            w = Math.round(w * r); h = Math.round(h * r);
+          }
+          var canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          canvas.toBlob(function (blob) {
+            if (blob) resolve(blob); else reject(new Error('画像の変換に失敗しました'));
+          }, 'image/jpeg', 0.85);
+        };
+        img.onerror = function () { reject(new Error('画像を読み込めませんでした')); };
+        img.src = e.target.result;
+      };
+      reader.onerror = function () { reject(new Error('画像を読み込めませんでした')); };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function uploadImage(blob) {
+    var fd = new FormData();
+    if (IMGBB_KEY) {
+      fd.append('image', blob, 'report.jpg');
+      return fetch('https://api.imgbb.com/1/upload?key=' + encodeURIComponent(IMGBB_KEY), { method: 'POST', body: fd })
+        .then(function (res) { return res.json(); })
+        .then(function (json) {
+          if (!json || !json.data || !json.data.url) throw new Error('画像アップロードに失敗しました（imgbb）');
+          return { url: json.data.url, host: 'imgbb（無期限）' };
+        });
+    }
+    fd.append('file', blob, 'report.jpg');
+    return fetch('https://tmpfiles.org/api/v1/upload', { method: 'POST', body: fd })
+      .then(function (res) { return res.json(); })
+      .then(function (json) {
+        if (!json || !json.data || !json.data.url) throw new Error('画像アップロードに失敗しました');
+        return { url: json.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/'), host: 'tmpfiles.org（60分）' };
+      });
+  }
+
+  function sendToChat(webhookUrl, payload) {
+    /* ブラウザから Google Chat へは no-cors で送信する（成否レスポンスは読めないため、
+       送信後は Chat 画面での確認を案内する） */
+    return fetch(webhookUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    });
+  }
+
+  function buildPayload(type, comment, imageUrl, ts) {
+    var commentHtml = comment ? '<br><b>コメント:</b> ' + comment.replace(/</g, '&lt;').replace(/\n/g, '<br>') : '';
+    return {
+      text: type.emoji + ' ' + type.label + ' が送信されました',
+      cardsV2: [{
+        cardId: 'report-card',
+        card: {
+          header: { title: type.emoji + ' ' + type.label, subtitle: '報告日時: ' + ts },
+          sections: [{
+            widgets: [
+              { textParagraph: { text: '<b>報告内容:</b> ' + type.label + '<br><b>報告日時:</b> ' + ts + commentHtml } },
+              { image: { imageUrl: imageUrl, onClick: { openLink: { url: imageUrl } } } }
+            ]
+          }]
+        }
+      }]
+    };
+  }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    status.className = 'status';
+    status.textContent = '';
+    var typeVal = typeSelect.value;
+    var file = photoInput.files && photoInput.files[0];
+    if (!typeVal) { status.className = 'status err'; status.textContent = '報告内容を選択してください'; return; }
+    if (!file) { status.className = 'status err'; status.textContent = '画像を選択してください'; return; }
+    if (file.size > 15 * 1024 * 1024) { status.className = 'status err'; status.textContent = '画像は15MBまでです'; return; }
+    if (!WEBHOOKS[typeVal]) { status.className = 'status err'; status.textContent = 'この報告先のWebhook URLが未設定です'; return; }
+
+    var t = TYPES[typeVal];
+    submitBtn.disabled = true;
+    status.className = 'status';
+    status.textContent = '送信中…（10〜30秒かかることがあります）';
+
+    resizeImage(file)
+      .then(uploadImage)
+      .then(function (up) {
+        var ts = new Date().toLocaleString('ja-JP', {
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', hour12: false
+        });
+        return sendToChat(WEBHOOKS[typeVal], buildPayload(t, commentInput.value.trim(), up.url, ts)).then(function () { return up; });
+      })
+      .then(function (up) {
+        form.style.display = 'none';
+        doneDetail.textContent = t.emoji + ' ' + t.label + ' のチャンネルに送信しました（画像ホスト: ' + up.host + '）。Chat画面で画像が表示されているかご確認ください。';
+        doneView.style.display = 'block';
+      })
+      .catch(function (err) {
+        status.className = 'status err';
+        status.textContent = '送信に失敗しました: ' + (err && err.message ? err.message : '通信エラー');
+      })
+      .finally(function () { submitBtn.disabled = false; });
+  });
+
+  againBtn.addEventListener('click', function () {
+    form.reset();
+    previewWrap.style.display = 'none';
+    photoDrop.style.display = 'block';
+    destChip.textContent = '未選択';
+    destChip.style.background = '#9aa7af';
+    destText.textContent = '報告内容に合わせて自動で切り替わります';
+    doneView.style.display = 'none';
+    form.style.display = 'block';
+    status.textContent = '';
+  });
+})();
+</script>
+</body>
+</html>
