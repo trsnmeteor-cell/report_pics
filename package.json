@@ -1,0 +1,13 @@
+{
+  "name": "image-report",
+  "version": "1.0.0",
+  "description": "報告内容を選び、写真を添えてGoogle Chatに送信する画像報告アプリ（PWA）",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}
